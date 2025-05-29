@@ -1,7 +1,7 @@
 {
     "name": "Moodle Quiz Helper",
     "description": "Show Moodle Quiz with AI Answer Probability",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "manifest_version": 3,
   
     "icons": {
