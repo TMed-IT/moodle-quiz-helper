@@ -1,23 +1,23 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // 保存された設定を読み込む
-  chrome.storage.sync.get(['apiKey', 'modelId', 'temperature'], (result) => {
+  chrome.storage.sync.get(['apiKey', 'modelId', 'temperature', 'thinkingBudget'], (result) => {
     document.getElementById('apiKey').value = result.apiKey || '';
-    document.getElementById('modelId').value = result.modelId || 'gemini-2.0-flash';
+    document.getElementById('modelId').value = result.modelId || 'gemini-2.5-flash';
     document.getElementById('temperature').value = result.temperature || 0;
+    document.getElementById('thinkingBudget').checked = (result.thinkingBudget === -1);
     updateTemperatureValue(result.temperature || 0);
   });
 
-  // Temperatureスライダーの値が変更されたときの処理
   const temperatureSlider = document.getElementById('temperature');
   temperatureSlider.addEventListener('input', (e) => {
     updateTemperatureValue(e.target.value);
   });
 
-  // 保存ボタンのイベントリスナー
   document.getElementById('save').addEventListener('click', () => {
     const apiKey = document.getElementById('apiKey').value.trim();
     const modelId = document.getElementById('modelId').value.trim();
     const temperature = parseFloat(document.getElementById('temperature').value);
+    const thinkingBudgetChecked = document.getElementById('thinkingBudget').checked;
+    const thinkingBudget = thinkingBudgetChecked ? -1 : 0;
 
     if (!apiKey) {
       showStatus('APIキーを入力してください', 'error');
@@ -44,7 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.sync.set({
       apiKey,
       modelId,
-      temperature
+      temperature,
+      thinkingBudget
     }, () => {
       setTimeout(() => {
         saveButton.innerHTML = originalText;
@@ -65,10 +66,8 @@ function showStatus(message, type) {
   status.textContent = message;
   status.className = `status ${type}`;
   status.style.display = 'block';
-  
-  // アニメーションをリセット
   status.style.animation = 'none';
-  status.offsetHeight; // リフロー
+  status.offsetHeight;
   status.style.animation = 'fadeIn 0.3s ease';
   
   setTimeout(() => {

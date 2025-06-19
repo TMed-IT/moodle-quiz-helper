@@ -180,6 +180,17 @@
       color: var(--text-secondary);
       margin-top: 4px;
     }
+
+    input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    input[type="checkbox"]:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+    }
   </style>
 </head>
 <body>
@@ -197,7 +208,7 @@
     <div class="form-group">
       <label for="modelId">モデルID</label>
       <div class="input-wrapper">
-        <input type="text" id="modelId" placeholder="例: gemini-2.0-flash" value="gemini-2.0-flash">
+        <input type="text" id="modelId" placeholder="例: gemini-2.5-flash-exp">
       </div>
       <div class="helper-text">使用するGeminiモデルを指定してください</div>
     </div>
@@ -207,6 +218,15 @@
       <input type="range" id="temperature" class="temperature-slider" min="0" max="1" step="0.1" value="0">
       <div class="temperature-value">0.0</div>
       <div class="helper-text">値が高いほど、より創造的な回答が生成されます（0.0-1.0）</div>
+    </div>
+
+    <div class="form-group">
+      <label for="thinkingBudget">Thinking Budget</label>
+      <div class="input-wrapper">
+        <input type="checkbox" id="thinkingBudget">
+        <label for="thinkingBudget" style="display: inline; margin-left: 8px; font-weight: normal;">AIの思考プロセスを有効にする</label>
+      </div>
+      <div class="helper-text">ONにすると動的思考が有効になります</div>
     </div>
 
     <button id="save">

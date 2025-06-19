@@ -1,7 +1,7 @@
 {
     "name": "Moodle Quiz Helper",
     "description": "Show Moodle Quiz with AI Answer Probability",
-    "version": "1.0.2",
+    "version": "1.1.0",
     "manifest_version": 3,
   
     "icons": {
@@ -13,13 +13,12 @@
   
     "permissions": [
       "activeTab",
-      "storage",
-      "clipboardWrite"
+      "storage"
     ],
   
     "content_scripts": [
       {
-        "matches": ["https://*/mod/quiz/review.php*"],
+        "matches": ["https://*/mod/quiz/attempt.php*"],
         "js": ["content.js"]
       }
     ],
