@@ -11,7 +11,7 @@
         
         Object.assign(btn.style, {
           position: 'absolute',
-          top: '10px',
+          bottom: '10px',
           right: '10px',
           width: '32px',
           height: '32px',
@@ -35,7 +35,6 @@
           showProbabilitiesForQuestion(index);
         });
         
-        // 問題要素に相対位置を設定
         Object.assign(question.style, {
           position: 'relative'
         });
@@ -56,29 +55,59 @@
 
       const q = questions[questionIndex];
       const qtext = q.querySelector('.qtext')?.innerText.trim() ?? '';
-      const optionNodes = q.querySelector('.answer')?.querySelectorAll('div.r0, div.r1') ?? [];
-      const options = Array.from(optionNodes, n => n.querySelector('div > div > div > div')?.innerText.trim());
+      const answerNode = q.querySelector('.answer');
 
-      return { qtext, options, qElem: q };
+      if (!answerNode) {
+        return { qtext, options: [], qElem: q, questionType: null };
+      }
+
+      const firstInput = answerNode.querySelector('input:not([type="hidden"])');
+      const inputId = firstInput ? firstInput.getAttribute('id') : '';
+      let questionType;
+      let options;
+
+      if (inputId.includes('answertrue') || inputId.includes('answerfalse')) {
+        questionType = 'tf';
+        options = [];
+      } else {
+        questionType = 'mcq';
+        const optionNodes = answerNode.querySelectorAll('div.r0, div.r1') ?? [];
+        options = Array.from(optionNodes, n => n.querySelector('div > div > div > div')?.innerText.trim());
+      }
+      
+      return { qtext, options, qElem: q, questionType };
     }
   
-    async function getProbabilities(qtext, options) {
+    async function getProbabilities(qtext, options, questionType) {
       const { apiKey, modelId, temperature, thinkingBudget } = await chrome.storage.sync.get(['apiKey', 'modelId', 'temperature', 'thinkingBudget']);
       if (!apiKey) {
         throw new Error('APIキーが設定されていません。拡張機能の設定からAPIキーを設定してください。');
       }
 
-      const prompt = `以下の問題と選択肢について、それぞれの選択肢が正解である確率を0から1の間の数値で評価してください。\n\n問題: ${qtext}\n\n選択肢:\n${options.map((opt, i) => `${String.fromCharCode(97 + i)}. ${opt}`).join('\n')}`;
-      
-      const responseSchema = {
-        type: 'object',
-        properties: Object.fromEntries(
-          options.map((_, i) => [
-            `option_${String.fromCharCode(97 + i)}`,
-            { type: 'number' }
-          ])
-        )
-      };
+      let prompt;
+      let responseSchema;
+
+      if (questionType === 'tf') {
+        prompt = `以下の文が正しいかの確率を0から1の間の数値で評価してください。0は完全に誤り、1は完全に正しいことを示します。\n\n文: ${qtext}`;
+        responseSchema = {
+          type: 'object',
+          properties: {
+            'correctness_probability': { type: 'number' }
+          },
+          required: ['correctness_probability']
+        };
+      } else {
+        prompt = `以下の問題と選択肢について、それぞれの選択肢が正解である確率を0から1の間の数値で評価してください。\n\n問題: ${qtext}\n\n選択肢:\n${options.map((opt, i) => `${String.fromCharCode(97 + i)}. ${opt}`).join('\n')}`;
+        responseSchema = {
+          type: 'object',
+          properties: Object.fromEntries(
+            options.map((_, i) => [
+              `option_${String.fromCharCode(97 + i)}`,
+              { type: 'number' }
+            ])
+          )
+        };
+      }
       
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`, {
         method: 'POST',
@@ -106,23 +135,27 @@
       }
 
       const data = await response.json();
-      const result = JSON.parse(data.candidates[0].content.parts[0].text);
-      return result;
+      const parsedResult = JSON.parse(data.candidates[0].content.parts[0].text);
+
+      if (questionType === 'tf') {
+        const correctnessProb = parsedResult.correctness_probability;
+        return {
+          'option_a': correctnessProb,
+          'option_b': 1 - correctnessProb
+        };
+      } else {
+        return parsedResult;
+      }
     }
 
-    function showProbabilityNextToQuestion(probabilities, qElem) {
+    function showProbabilityNextToQuestion(probabilities, qElem, questionType) {
       const old = qElem.querySelectorAll('.mqee-probability');
       old.forEach(e => e.remove());
 
-      const optionNodes = qElem.querySelector('.answer')?.querySelectorAll('div.r0, div.r1') ?? [];
-      optionNodes.forEach((opt, i) => {
-        const key = `option_${String.fromCharCode(97 + i)}`;
-        const prob = probabilities[key];
-        if (prob === undefined) return;
+      const answerNode = qElem.querySelector('.answer');
+      if (!answerNode) return;
 
-        const optTextElem = opt.querySelector('div > div > div > div');
-        if (!optTextElem) return;
-
+      const createSpan = (prob) => {
         const span = document.createElement('span');
         span.className = 'mqee-probability';
         span.style.cssText = `
@@ -135,8 +168,30 @@
           display: inline-block;
         `;
         span.textContent = `${(prob * 100).toFixed(1)}%`;
-        optTextElem.appendChild(span);
-      });
+        return span;
+      };
+
+      if (questionType === 'tf') {
+        const trueLabel = answerNode.querySelector('label[for$="answertrue"]');
+        if (trueLabel && probabilities['option_a'] !== undefined) {
+          trueLabel.appendChild(createSpan(probabilities['option_a']));
+        }
+        const falseLabel = answerNode.querySelector('label[for$="answerfalse"]');
+        if (falseLabel && probabilities['option_b'] !== undefined) {
+          falseLabel.appendChild(createSpan(probabilities['option_b']));
+        }
+      } else {
+        const optionNodes = answerNode.querySelectorAll('div.r0, div.r1') ?? [];
+        optionNodes.forEach((opt, i) => {
+          const key = `option_${String.fromCharCode(97 + i)}`;
+          const prob = probabilities[key];
+          if (prob === undefined) return;
+
+          const optTextElem = opt.querySelector('div > div > div > div');
+          if (!optTextElem) return;
+          optTextElem.appendChild(createSpan(prob));
+        });
+      }
     }
 
     function shouldRunOnCurrentPage() {
@@ -146,9 +201,9 @@
 
     async function showProbabilitiesForQuestion(questionIndex) {
       try {
-        const { qtext, options, qElem } = parseQuiz(questionIndex);
-        const probabilities = await getProbabilities(qtext, options);
-        showProbabilityNextToQuestion(probabilities, qElem);
+        const { qtext, options, qElem, questionType } = parseQuiz(questionIndex);
+        const probabilities = await getProbabilities(qtext, options, questionType);
+        showProbabilityNextToQuestion(probabilities, qElem, questionType);
         toast('確率を表示しました');
       } catch (err) {
         console.error(err);
@@ -200,4 +255,3 @@
       }, 1000);
     }
   })();
-  

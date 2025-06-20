@@ -29,7 +29,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // 保存中のアニメーション
     const saveButton = document.getElementById('save');
     const originalText = saveButton.innerHTML;
     saveButton.innerHTML = `
@@ -62,15 +61,35 @@ function updateTemperatureValue(value) {
 }
 
 function showStatus(message, type) {
-  const status = document.getElementById('status');
-  status.textContent = message;
-  status.className = `status ${type}`;
-  status.style.display = 'block';
-  status.style.animation = 'none';
-  status.offsetHeight;
-  status.style.animation = 'fadeIn 0.3s ease';
-  
+  // 既存のstatus要素は使わず、動的にトーストを生成
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.className = `toast-status ${type}`;
+  Object.assign(toast.style, {
+    position: 'fixed',
+    top: '32px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    zIndex: 10000,
+    minWidth: '240px',
+    maxWidth: '90vw',
+    width: 'fit-content',
+    padding: '16px 24px',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    textAlign: 'center',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+    background: type === 'success' ? 'rgba(76, 175, 80, 0.95)' : 'rgba(244, 67, 54, 0.95)',
+    color: '#fff',
+    opacity: '0',
+    transition: 'opacity 0.3s',
+    pointerEvents: 'none',
+  });
+  document.body.appendChild(toast);
+  // フェードイン
+  requestAnimationFrame(() => { toast.style.opacity = '1'; });
   setTimeout(() => {
-    status.style.display = 'none';
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
   }, 3000);
 } 
