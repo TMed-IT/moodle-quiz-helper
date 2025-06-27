@@ -61,7 +61,6 @@ function updateTemperatureValue(value) {
 }
 
 function showStatus(message, type) {
-  // 既存のstatus要素は使わず、動的にトーストを生成
   const toast = document.createElement('div');
   toast.textContent = message;
   toast.className = `toast-status ${type}`;

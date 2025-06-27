@@ -58,7 +58,7 @@
       const answerNode = q.querySelector('.answer');
 
       if (!answerNode) {
-        return { qtext, options: [], qElem: q, questionType: null };
+        return { qtext, options: [], qElem: q, questionType: 'essay' };
       }
 
       const firstInput = answerNode.querySelector('input:not([type="hidden"])');
@@ -68,6 +68,9 @@
 
       if (inputId.includes('answertrue') || inputId.includes('answerfalse')) {
         questionType = 'tf';
+        options = [];
+      } else if (answerNode.querySelector('textarea') || answerNode.querySelector('input[type="text"]')) {
+        questionType = 'essay';
         options = [];
       } else {
         questionType = 'mcq';
@@ -95,6 +98,15 @@
             'correctness_probability': { type: 'number' }
           },
           required: ['correctness_probability']
+        };
+      } else if (questionType === 'essay') {
+        prompt = `以下の問題に対する予想される回答を生成してください。簡潔で正確な回答を心がけてください。\n\n問題: ${qtext}`;
+        responseSchema = {
+          type: 'object',
+          properties: {
+            'expected_answer': { type: 'string' }
+          },
+          required: ['expected_answer']
         };
       } else {
         prompt = `以下の問題と選択肢について、それぞれの選択肢が正解である確率を0から1の間の数値で評価してください。\n\n問題: ${qtext}\n\n選択肢:\n${options.map((opt, i) => `${String.fromCharCode(97 + i)}. ${opt}`).join('\n')}`;
@@ -143,6 +155,8 @@
           'option_a': correctnessProb,
           'option_b': 1 - correctnessProb
         };
+      } else if (questionType === 'essay') {
+        return parsedResult;
       } else {
         return parsedResult;
       }
@@ -171,6 +185,22 @@
         return span;
       };
 
+      const createAnswerDiv = (answer) => {
+        const div = document.createElement('div');
+        div.className = 'mqee-probability';
+        div.style.cssText = `
+          margin-top: 0.5em;
+          font-size: 0.9em;
+          color: #1976d2;
+          background: #e3f2fd;
+          border-radius: 4px;
+          padding: 8px 12px;
+          border-left: 4px solid #1976d2;
+        `;
+        div.innerHTML = `<strong>回答予想:</strong><br>${answer}`;
+        return div;
+      };
+
       if (questionType === 'tf') {
         const trueLabel = answerNode.querySelector('label[for$="answertrue"]');
         if (trueLabel && probabilities['option_a'] !== undefined) {
@@ -179,6 +209,10 @@
         const falseLabel = answerNode.querySelector('label[for$="answerfalse"]');
         if (falseLabel && probabilities['option_b'] !== undefined) {
           falseLabel.appendChild(createSpan(probabilities['option_b']));
+        }
+      } else if (questionType === 'essay') {
+        if (probabilities.expected_answer) {
+          answerNode.appendChild(createAnswerDiv(probabilities.expected_answer));
         }
       } else {
         const optionNodes = answerNode.querySelectorAll('div.r0, div.r1') ?? [];
@@ -204,7 +238,12 @@
         const { qtext, options, qElem, questionType } = parseQuiz(questionIndex);
         const probabilities = await getProbabilities(qtext, options, questionType);
         showProbabilityNextToQuestion(probabilities, qElem, questionType);
-        toast('確率を表示しました');
+        
+        if (questionType === 'essay') {
+          toast('予想される回答を表示しました');
+        } else {
+          toast('確率を表示しました');
+        }
       } catch (err) {
         console.error(err);
         toast('エラー: ' + err.message);
