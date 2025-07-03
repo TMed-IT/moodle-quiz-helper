@@ -72,6 +72,15 @@
       } else if (answerNode.querySelector('textarea') || answerNode.querySelector('input[type="text"]')) {
         questionType = 'essay';
         options = [];
+      } else if (answerNode.querySelector('select')) {
+        questionType = 'matching';
+        const rows = answerNode.querySelectorAll('tr');
+        options = Array.from(rows).map(row => {
+          const label = row.querySelector('td.text')?.innerText.trim() ?? '';
+          const select = row.querySelector('select');
+          const choices = select ? Array.from(select.options).slice(1).map(opt => opt.text.trim()) : [];
+          return { label, choices };
+        });
       } else {
         questionType = 'mcq';
         const optionNodes = answerNode.querySelectorAll('div.r0, div.r1') ?? [];
@@ -107,6 +116,23 @@
             'expected_answer': { type: 'string' }
           },
           required: ['expected_answer']
+        };
+      } else if (questionType === 'matching') {
+        const matchingText = options.map(opt => `${opt.label}: ${opt.choices.join(', ')}`).join('\n');
+        prompt = `以下のマッチング問題について、各ラベルごとに各選択肢が正解である確率を0から1の数値で評価してください。出力はJSON形式で、各ラベルごとに選択肢名をキー、確率を値としてください。\n\n問題: ${qtext}\n\n${matchingText}`;
+        responseSchema = {
+          type: 'object',
+          properties: Object.fromEntries(
+            options.map(opt => [
+              opt.label,
+              {
+                type: 'object',
+                properties: Object.fromEntries(
+                  opt.choices.map(choice => [choice, { type: 'number' }])
+                )
+              }
+            ])
+          )
         };
       } else {
         prompt = `以下の問題と選択肢について、それぞれの選択肢が正解である確率を0から1の間の数値で評価してください。\n\n問題: ${qtext}\n\n選択肢:\n${options.map((opt, i) => `${String.fromCharCode(97 + i)}. ${opt}`).join('\n')}`;
@@ -214,6 +240,21 @@
         if (probabilities.expected_answer) {
           answerNode.appendChild(createAnswerDiv(probabilities.expected_answer));
         }
+      } else if (questionType === 'matching') {
+        const rows = answerNode.querySelectorAll('tr');
+        rows.forEach(row => {
+          const label = row.querySelector('td.text')?.innerText.trim() ?? '';
+          const select = row.querySelector('select');
+          if (!label || !select) return;
+          const probObj = probabilities[label];
+          if (!probObj) return;
+          Array.from(select.options).forEach((opt, idx) => {
+            if (idx === 0) return;
+            const prob = probObj[opt.text.trim()];
+            if (prob === undefined) return;
+            opt.textContent = opt.text.replace(/\s*\([^)]*\)\s*$/, '') + `（${(prob * 100).toFixed(1)}%）`;
+          });
+        });
       } else {
         const optionNodes = answerNode.querySelectorAll('div.r0, div.r1') ?? [];
         optionNodes.forEach((opt, i) => {
