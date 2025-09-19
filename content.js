@@ -43,7 +43,26 @@
       });
     }
 
-    function parseQuiz(questionIndex = 0) {
+    async function convertImageToBase64(imageUrl) {
+      try {
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve({
+            dataUrl: reader.result,
+            mimeType: blob.type || 'image/png'
+          });
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        console.error('画像の変換に失敗しました:', error);
+        return null;
+      }
+    }
+
+    async function parseQuiz(questionIndex = 0) {
       const questions = document.querySelectorAll('div.que');
       if (questions.length === 0) {
         throw new Error('Question block not found.');
@@ -54,11 +73,13 @@
       }
 
       const q = questions[questionIndex];
-      const qtext = q.querySelector('.qtext')?.innerText.trim() ?? '';
+      const qtextElement = q.querySelector('.qtext');
+      const qtext = qtextElement?.innerText.trim() ?? '';
+      const images = qtextElement ? Array.from(qtextElement.querySelectorAll('img')) : [];
       const answerNode = q.querySelector('.answer');
 
       if (!answerNode) {
-        return { qtext, options: [], qElem: q, questionType: 'essay' };
+        return { qtext, options: [], qElem: q, questionType: 'essay', images };
       }
 
       const firstInput = answerNode.querySelector('input:not([type="hidden"])');
@@ -87,10 +108,10 @@
         options = Array.from(optionNodes, n => n.querySelector('div > div > div > div')?.innerText.trim());
       }
       
-      return { qtext, options, qElem: q, questionType };
+      return { qtext, options, qElem: q, questionType, images };
     }
   
-    async function getProbabilities(qtext, options, questionType) {
+    async function getProbabilities(qtext, options, questionType, images = []) {
       const { apiKey, modelId, temperature, thinkingBudget } = await chrome.storage.sync.get(['apiKey', 'modelId', 'temperature', 'thinkingBudget']);
       if (!apiKey) {
         throw new Error('APIキーが設定されていません。拡張機能の設定からAPIキーを設定してください。');
@@ -98,6 +119,22 @@
 
       let prompt;
       let responseSchema;
+      
+      const imageParts = [];
+      for (const img of images) {
+        const imageUrl = img.src;
+        if (imageUrl) {
+          const imageData = await convertImageToBase64(imageUrl);
+          if (imageData) {
+            imageParts.push({
+              inline_data: {
+                mime_type: imageData.mimeType,
+                data: imageData.dataUrl.split(',')[1]
+              }
+            });
+          }
+        }
+      }
 
       if (questionType === 'tf') {
         prompt = `以下の文が正しいかの確率を0から1の間の数値で評価してください。0は完全に誤り、1は完全に正しいことを示します。\n\n文: ${qtext}`;
@@ -155,7 +192,10 @@
         body: JSON.stringify({
           contents: [{
             role: 'user',
-            parts: [{ text: prompt }]
+            parts: [
+              { text: prompt },
+              ...imageParts
+            ]
           }],
           generationConfig: {
             temperature,
@@ -276,8 +316,8 @@
 
     async function showProbabilitiesForQuestion(questionIndex) {
       try {
-        const { qtext, options, qElem, questionType } = parseQuiz(questionIndex);
-        const probabilities = await getProbabilities(qtext, options, questionType);
+        const { qtext, options, qElem, questionType, images } = await parseQuiz(questionIndex);
+        const probabilities = await getProbabilities(qtext, options, questionType, images);
         showProbabilityNextToQuestion(probabilities, qElem, questionType);
         
         if (questionType === 'essay') {
